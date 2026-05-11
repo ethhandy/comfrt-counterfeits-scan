@@ -72,12 +72,14 @@ function inferReasonTag(sigName: string): string {
 
 function inferTextReasonTag(reason: string): string {
   const r = reason.toLowerCase();
-  if (r.includes('brand') || r.includes('comfrt') || r.includes('title') || r.includes('seller'))
-    return 'brand';
-  if (r.includes('price') || r.includes('msrp') || r.includes('%'))
-    return 'price';
-  if (r.includes('image') || r.includes('visual') || r.includes('phash') || r.includes('clip'))
+  if (r.includes('image') || r.includes('visual') || r.includes('similarity') || r.includes('phash') || r.includes('clip'))
     return 'image';
+  if (r.includes('price') || r.includes('msrp') || r.includes('retail') || r.includes('$'))
+    return 'price';
+  if (r.includes('seller') || r.includes('feedback') || r.includes('rating') || r.includes('review'))
+    return 'seller';
+  if (r.includes('brand') || r.includes('comfrt') || r.includes('title') || r.includes('keyword'))
+    return 'brand';
   return 'text';
 }
 
