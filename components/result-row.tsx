@@ -7,9 +7,9 @@ import { PlatformBadge } from './platform-badge';
 type Bucket = 'high' | 'medium' | 'low' | 'minimal';
 
 function scoreBucket(score: number): Bucket {
-  if (score >= 0.8) return 'high';
-  if (score >= 0.6) return 'medium';
-  if (score >= 0.4) return 'low';
+  if (score >= 0.85) return 'high';
+  if (score >= 0.65) return 'medium';
+  if (score >= 0.45) return 'low';
   return 'minimal';
 }
 
@@ -19,6 +19,20 @@ const BUCKET_STYLE: Record<Bucket, { pill: string; dot: string }> = {
   low:     { pill: 'bg-[#dbeafe] text-[#1e40af]', dot: 'bg-[#2563eb]' },
   minimal: { pill: 'bg-stone-200 text-stone-500',  dot: 'bg-stone-400' },
 };
+
+const LLM_BUCKET_STYLE: Record<Bucket, { ring: string; fg: string; border: string }> = {
+  high:    { ring: '#e11d48', fg: '#9f1239',  border: '#e11d48' },
+  medium:  { ring: '#d97706', fg: '#92400e',  border: '#d97706' },
+  low:     { ring: '#2563eb', fg: '#1e40af',  border: '#2563eb' },
+  minimal: { ring: '#a8a29e', fg: '#57534e',  border: '#d6d3d1' },
+};
+
+function verdictFromScore(score: number): string {
+  if (score >= 0.85) return 'Likely counterfeit';
+  if (score >= 0.65) return 'Probable knockoff';
+  if (score >= 0.45) return 'Suspicious';
+  return 'Low risk';
+}
 
 function ScorePill({ score }: { score: number }) {
   const { pill, dot } = BUCKET_STYLE[scoreBucket(score)];
@@ -52,6 +66,28 @@ function SparkBars({ signals }: { signals: SignalResult[] }) {
   );
 }
 
+function LLMVerdictCell({ llmSignal }: { llmSignal: SignalResult | undefined }) {
+  if (!llmSignal || llmSignal.reasoning === 'LLM signal unavailable') {
+    return <span className="text-stone-300 text-[11px]">—</span>;
+  }
+  const bucket = scoreBucket(llmSignal.score);
+  const c = LLM_BUCKET_STYLE[bucket];
+  const model = (llmSignal.raw as Record<string, unknown>)?.model as string ?? 'gemini';
+  return (
+    <div className="flex items-center gap-1.5 min-w-0">
+      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: c.ring }} />
+      <div className="min-w-0">
+        <div className="text-[11.5px] font-medium text-stone-800 truncate" style={{ color: c.fg }}>
+          {verdictFromScore(llmSignal.score)}
+        </div>
+        <div className="font-mono text-[9.5px] text-stone-400 truncate">
+          {model} · {llmSignal.score.toFixed(2)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const REASON_STYLE: Record<string, { bg: string; text: string }> = {
   brand:  { bg: 'bg-[#fce7f3]', text: 'text-[#9d174d]' },
   image:  { bg: 'bg-[#e0e7ff]', text: 'text-[#3730a3]' },
@@ -59,16 +95,6 @@ const REASON_STYLE: Record<string, { bg: string; text: string }> = {
   text:   { bg: 'bg-[#dcfce7]', text: 'text-[#14532d]' },
   seller: { bg: 'bg-[#fee2e2]', text: 'text-[#991b1b]' },
 };
-
-function inferReasonTag(sigName: string): string {
-  if (sigName.startsWith('brand') || sigName.toLowerCase().includes('brand') || sigName.toLowerCase().includes('title'))
-    return 'brand';
-  if (sigName.startsWith('price') || sigName.toLowerCase().includes('price'))
-    return 'price';
-  if (sigName.startsWith('image') || sigName.toLowerCase().includes('image'))
-    return 'image';
-  return 'text';
-}
 
 function inferTextReasonTag(reason: string): string {
   const r = reason.toLowerCase();
@@ -81,15 +107,6 @@ function inferTextReasonTag(reason: string): string {
   if (r.includes('brand') || r.includes('comfrt') || r.includes('title') || r.includes('keyword'))
     return 'brand';
   return 'text';
-}
-
-function ReasonTag({ tag }: { tag: string }) {
-  const s = REASON_STYLE[tag] ?? REASON_STYLE.text;
-  return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide ${s.bg} ${s.text}`}>
-      {tag}
-    </span>
-  );
 }
 
 function SignalBarRow({ signal }: { signal: SignalResult }) {
@@ -109,14 +126,52 @@ function SignalBarRow({ signal }: { signal: SignalResult }) {
   );
 }
 
+function LLMPanel({ llmSignal }: { llmSignal: SignalResult }) {
+  const bucket = scoreBucket(llmSignal.score);
+  const c = LLM_BUCKET_STYLE[bucket];
+  const model = (llmSignal.raw as Record<string, unknown>)?.model as string ?? 'gemini-2.0-flash';
+  const verdict = verdictFromScore(llmSignal.score);
+
+  return (
+    <div
+      className="flex gap-4 bg-white border border-stone-200 rounded-lg p-3.5"
+      style={{ borderLeft: `3px solid ${c.border}` }}
+    >
+      <div className="flex-none flex flex-col gap-1.5" style={{ minWidth: 150 }}>
+        <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-stone-400">
+          <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-stone-900 text-white text-[8px] font-bold font-mono">
+            AI
+          </span>
+          LLM analysis
+        </div>
+        <div className="text-[13.5px] font-semibold leading-tight" style={{ color: c.fg }}>
+          {verdict}
+        </div>
+        <div className="font-mono text-[10.5px] text-stone-400">
+          confidence <strong className="text-stone-700">{llmSignal.score.toFixed(2)}</strong>
+        </div>
+        <div className="font-mono text-[10px] text-stone-400">{model}</div>
+      </div>
+      <div className="flex-1 text-[12.5px] text-stone-600 leading-relaxed border-l border-stone-200 pl-4 min-w-0">
+        &ldquo;{llmSignal.reasoning}&rdquo;
+      </div>
+    </div>
+  );
+}
+
 function ExpandedDrawer({ result }: { result: ScoredListing }) {
   const topSignal = [...result.signals]
     .filter((s) => s.score >= 0.5)
     .sort((a, b) => b.score - a.score)[0];
 
+  const llmSignal = result.signals.find((s) => s.name === 'llm_analysis');
+  const hasLlm = llmSignal && llmSignal.reasoning !== 'LLM signal unavailable';
+  const nonLlmSignals = result.signals.filter((s) => s.name !== 'llm_analysis');
+  const displayReasons = result.topReasons.filter((r) => r !== llmSignal?.reasoning);
+
   return (
     <div
-      className="px-4 sm:px-5 pt-4 pb-5 bg-stone-50 border-t border-stone-200"
+      className="px-4 sm:px-5 pt-4 pb-5 bg-stone-50 border-t border-stone-200 space-y-4"
       onClick={(e) => e.stopPropagation()}
     >
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
@@ -162,13 +217,13 @@ function ExpandedDrawer({ result }: { result: ScoredListing }) {
         </div>
 
         <div className="space-y-3">
-          <p className="text-[10.5px] font-semibold text-stone-400 uppercase tracking-wider">Signal breakdown</p>
-          <div className="space-y-3">
-            {result.signals.map((sig) => (
+          <p className="text-[10.5px] font-semibold text-stone-400 uppercase tracking-wider">Raw signal values</p>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+            {nonLlmSignals.map((sig) => (
               <SignalBarRow key={sig.name} signal={sig} />
             ))}
           </div>
-          <div className="p-2.5 bg-white border border-stone-200 rounded-md mt-2">
+          <div className="p-2.5 bg-white border border-stone-200 rounded-md">
             <p className="text-[10.5px] font-semibold text-stone-400 mb-1">Weighted score</p>
             <p className="font-mono text-xs text-stone-600">
               final = <span className="font-bold text-stone-900">{result.finalScore.toFixed(2)}</span>
@@ -182,9 +237,9 @@ function ExpandedDrawer({ result }: { result: ScoredListing }) {
         </div>
 
         <div className="space-y-3">
-          <p className="text-[10.5px] font-semibold text-stone-400 uppercase tracking-wider">Contributing reasons</p>
+          <p className="text-[10.5px] font-semibold text-stone-400 uppercase tracking-wider">Top contributing reasons</p>
           <div className="space-y-2">
-            {result.topReasons.length > 0 ? result.topReasons.map((reason, i) => {
+            {displayReasons.length > 0 ? displayReasons.map((reason, i) => {
               const tag = inferTextReasonTag(reason);
               const s = REASON_STYLE[tag] ?? REASON_STYLE.text;
               return (
@@ -198,6 +253,7 @@ function ExpandedDrawer({ result }: { result: ScoredListing }) {
             }) : (
               <p className="text-xs text-stone-400">No flags raised.</p>
             )}
+
           </div>
           <div className="flex gap-2 pt-1">
             <a
@@ -215,6 +271,8 @@ function ExpandedDrawer({ result }: { result: ScoredListing }) {
         </div>
 
       </div>
+
+      {hasLlm && <LLMPanel llmSignal={llmSignal!} />}
     </div>
   );
 }
@@ -226,15 +284,10 @@ interface Props {
 export function ResultRow({ result }: Props) {
   const [expanded, setExpanded] = useState(false);
 
-  const topSignal = [...result.signals]
-    .filter((s) => s.score >= 0.5)
-    .sort((a, b) => b.score - a.score)[0];
-
-  const topTag = topSignal ? inferReasonTag(topSignal.name) : null;
+  const llmSignal = result.signals.find((s) => s.name === 'llm_analysis');
 
   return (
     <div>
-      {/* Main row */}
       <div
         className="flex items-center gap-3 px-4 sm:px-5 py-2.5 hover:bg-stone-50 transition-colors cursor-pointer"
         onClick={() => setExpanded((v) => !v)}
@@ -287,8 +340,8 @@ export function ResultRow({ result }: Props) {
           <SparkBars signals={result.signals} />
         </div>
 
-        <div className="hidden sm:flex w-16 shrink-0 items-center">
-          {topTag && <ReasonTag tag={topTag} />}
+        <div className="hidden sm:flex w-44 shrink-0 items-center">
+          <LLMVerdictCell llmSignal={llmSignal} />
         </div>
 
         <svg

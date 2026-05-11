@@ -1,14 +1,25 @@
 export const AUTHENTIC_PRICE_RANGE = { min: 59, max: 169 } as const;
 
 export const SIGNAL_WEIGHTS = {
-  titleKeyword: 0.35,
-  brandClaim:   0.25,
-  imageHash:    0.20,
-  priceAnomaly: 0.15,
+  titleKeyword: 0.20,
+  brandClaim:   0.20,
+  llmAnalysis:  0.25,
+  imageHash:    0.18,
+  priceAnomaly: 0.12,
   sellerTrust:  0.05,
 } as const;
 
-export const BRAND_TERMS = ['comfrt', 'com frt', 'comfrrt', 'c0mfrt'] as const;
+export const BRAND_TERMS = [
+  'comfrt',
+  'com frt',
+  'com-frt',
+  'comfrrt',
+  'comfrtt',
+  'c0mfrt',
+  'cumfrt',
+  'confrt',
+  'c*mfrt',
+] as const;
 
 export const PRODUCT_TERMS = [
   'blanket hoodie',

@@ -1,5 +1,6 @@
 import type { SignalResult } from './types';
 import { computeDHashFromUrl, hashSimilarity } from './dhash';
+import { scoreTitleWithGemini, LLM_MODEL } from './llm';
 import {
   AUTHENTIC_PRICE_RANGE,
   SIGNAL_WEIGHTS,
@@ -12,6 +13,24 @@ import {
   IMAGE_HASH_FALLBACK_SCORE,
   SELLER_DEFAULT_SCORE,
 } from '@/const/signals';
+
+export async function computeLlmSignal(
+  title: string,
+  brand: string | null,
+  price: number | null,
+): Promise<SignalResult> {
+  const w = SIGNAL_WEIGHTS.llmAnalysis;
+  const { score, reasoning } = await scoreTitleWithGemini(title, brand, price);
+  return {
+    name: 'llm_analysis',
+    label: 'LLM Analysis',
+    score,
+    weight: w,
+    contribution: score * w,
+    raw: { model: LLM_MODEL, score },
+    reasoning,
+  };
+}
 
 export function computeTitleKeywordSignal(title: string): SignalResult {
   const t = title.toLowerCase();

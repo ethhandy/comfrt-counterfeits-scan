@@ -7,7 +7,7 @@ export function ResultsHeader() {
       <div className="w-20 shrink-0">Market</div>
       <div className="w-20 shrink-0 text-right">Price</div>
       <div className="w-28 shrink-0">Signals</div>
-      <div className="w-16 shrink-0">Top flag</div>
+      <div className="w-44 shrink-0">LLM verdict</div>
       <div className="w-4 shrink-0" />
     </div>
   );
