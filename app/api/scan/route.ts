@@ -13,7 +13,7 @@ import {
   SCORING_CONCURRENCY,
   MIN_RESULT_SCORE,
   SSE_HEADERS,
-} from '@/lib/const/scan';
+} from '@/const/scan';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';

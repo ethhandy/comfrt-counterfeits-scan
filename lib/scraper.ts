@@ -4,7 +4,7 @@ import {
   SCRAPER_TIMEOUT_MS,
   SCRAPER_RAW_TIMEOUT_MS,
   MAX_EBAY_RAW_LISTINGS,
-} from './const/scraper';
+} from '@/const/scraper';
 
 const SCRAPER_API_KEY = process.env.SCRAPER_API_KEY ?? '';
 

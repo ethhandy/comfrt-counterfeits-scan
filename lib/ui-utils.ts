@@ -1,4 +1,4 @@
-import { SCORE_THRESHOLDS } from './const/ui';
+import { SCORE_THRESHOLDS } from '@/const/ui';
 
 export function formatElapsed(ms: number): string {
   const s = Math.floor(ms / 1000);

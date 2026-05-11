@@ -11,7 +11,7 @@ import {
   EBAY_FEEDBACK,
   IMAGE_HASH_FALLBACK_SCORE,
   SELLER_DEFAULT_SCORE,
-} from './const/signals';
+} from '@/const/signals';
 
 export function computeTitleKeywordSignal(title: string): SignalResult {
   const t = title.toLowerCase();

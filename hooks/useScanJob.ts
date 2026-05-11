@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef } from 'react';
 import type { ScoredListing, JobStats, ScanEvent } from '@/lib/types';
-import { LOCAL_ELAPSED_INTERVAL_MS } from '@/lib/const/scan';
+import { LOCAL_ELAPSED_INTERVAL_MS } from '@/const/scan';
 
 export interface ScanJobState {
   isScanning: boolean;

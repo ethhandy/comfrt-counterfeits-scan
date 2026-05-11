@@ -1,5 +1,5 @@
 import { Fragment } from 'react';
-import { PIPELINE_OVERVIEW } from '@/lib/const/ui';
+import { PIPELINE_OVERVIEW } from '@/const/ui';
 
 export function PipelineFooter() {
   return (

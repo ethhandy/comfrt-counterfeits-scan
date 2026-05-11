@@ -1,5 +1,5 @@
 import { scoreLabel } from '@/lib/ui-utils';
-import { SCORE_THRESHOLDS } from '@/lib/const/ui';
+import { SCORE_THRESHOLDS } from '@/const/ui';
 
 interface Props {
   score: number;

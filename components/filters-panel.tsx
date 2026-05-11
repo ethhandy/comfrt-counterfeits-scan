@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { Platform } from '@/lib/types';
-import { PLATFORM_OPTIONS } from '@/lib/const/ui';
+import { PLATFORM_OPTIONS } from '@/const/ui';
 
 interface Props {
   minScore: number;

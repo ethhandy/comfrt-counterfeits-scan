@@ -2,40 +2,43 @@
 
 A Next.js app that scans Amazon and eBay for potential Comfrt brand infringements, scores each listing across 5 independent signals, and streams results to the UI in real time.
 
+**Live demo:** https://comfrt-counterfeits-scan.vercel.app/
+
 ## Quick Start
 
 ```bash
+cp .env.example .env.local   # add your ScraperAPI key
 npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and click **Start Scan**.
+Open [http://localhost:3000](http://localhost:3000) and click **Run scan**.
 
-> **Requirements:** Node.js 18+, npm. No additional API keys needed — the ScraperAPI key is bundled as a fallback. Override via `SCRAPER_API_KEY` env var.
+> **Requirements:** Node.js 18+, npm. A ScraperAPI key is required — get one at [scraperapi.com](https://www.scraperapi.com) and set it in `.env.local`.
 
 ---
 
 ## What It Does
 
-1. **Reference set**: Fetches authentic Comfrt product images from `comfrt.com` and computes perceptual hashes (dHash via `sharp`) as ground truth.
+1. **Reference set** — Fetches authentic Comfrt product images from `comfrt.com` and computes perceptual hashes (dHash via `sharp`) as ground truth for visual similarity comparisons.
 
-2. **Query fan-out**: Runs 11 Amazon + 10 eBay search queries (6 Amazon terms × 2 pages, 5 eBay terms × 2 pages) concurrently (max 8 in-flight), within a 120-request budget.
+2. **Query fan-out** — Runs 6 Amazon queries × 2 pages and 5 eBay queries × 2 pages (22 tasks total), interleaved so both platforms compete for concurrency slots from the start. Max 8 requests in-flight; capped at 50 ScraperAPI search calls.
 
-3. **Deduplication**: ASIN / eBay item ID keyed; seen items are skipped.
+3. **Deduplication** — ASIN / eBay item ID keyed; duplicate listings across queries are skipped before scoring.
 
 4. **5-signal scoring** (weights sum to 1.0):
 
    | Signal | Weight | What it measures |
    |---|---|---|
    | Title Keywords | 35% | Exact brand name, product-type terms, imitation language |
-   | Brand Claim | 25% | Brand field claiming/resembling "Comfrt" |
+   | Brand Claim | 25% | Brand field claiming or resembling "Comfrt" |
    | Image Hash | 20% | Perceptual (dHash) similarity to authentic product images |
-   | Price Anomaly | 15% | Distance from authentic retail range ($79–$159) |
-   | Seller Trust | 5% | Seller feedback score indicators |
+   | Price Anomaly | 15% | Distance from authentic retail range ($59–$169) |
+   | Seller Trust | 5% | Seller feedback / rating indicators |
 
-5. **Streaming**: Results appear in the UI via Server-Sent Events as each listing is scored — no waiting for the full scan.
+5. **Streaming** — Results appear in the UI via Server-Sent Events as each listing is scored. No waiting for the full scan to finish.
 
-6. **Explainability**: Each result shows the final score, top 3 reasons in plain English, per-signal bars, and raw values for debugging.
+6. **Explainability** — Each result shows the final score, top 3 reasons in plain English, per-signal spark bars, and raw signal values for inspection. Expand any row for the full breakdown.
 
 ---
 
@@ -43,24 +46,40 @@ Open [http://localhost:3000](http://localhost:3000) and click **Start Scan**.
 
 ```
 app/
-  api/scan/route.ts   SSE endpoint — orchestrates the full pipeline
-  page.tsx            Client UI with real-time result rendering
+  api/scan/route.ts       SSE endpoint — orchestrates the full pipeline
+  page.tsx                Root page — layout and state wiring
+components/
+  scan-header.tsx         Sticky header with live job stats and budget bar
+  filter-bar.tsx          Marketplace filter, score threshold slider, sort controls
+  results-header.tsx      Column header row (desktop only)
+  result-row.tsx          Per-listing row with score pill, spark bars, expandable drawer
+  empty-state.tsx         Pre-scan landing state
+  pipeline-footer.tsx     Sticky footer with pipeline configuration summary
+const/
+  scan.ts                 Query lists, concurrency limits, budget constants
+  scraper.ts              API base URLs, timeouts, reference set config
+  signals.ts              Signal weights, price thresholds, brand terms
+  ui.ts                   Pipeline overview labels for the footer
+hooks/
+  useScanJob.ts           EventSource lifecycle, result accumulation, local elapsed timer
 lib/
-  types.ts            Shared TypeScript interfaces
-  limiter.ts          Custom concurrency limiter (no external deps)
-  dhash.ts            Perceptual hash (dHash) with sharp
-  reference.ts        Fetches/hashes authentic Comfrt images
-  scraper.ts          ScraperAPI client for Amazon + eBay
-  signals.ts          Five scoring signal implementations
-  scoring.ts          Combines signals into final probability score
-ARCHITECTURE.md       Multi-tenant production evolution plan
+  types.ts                Shared TypeScript interfaces
+  limiter.ts              Concurrency limiter (no external deps)
+  dhash.ts                Perceptual hash (dHash) — resize 9×8, grayscale, compare adjacent pixels
+  reference.ts            Fetches and hashes authentic Comfrt product images
+  scraper.ts              ScraperAPI client for Amazon + eBay (structured + HTML fallback)
+  signals.ts              Five scoring signal implementations
+  scoring.ts              Combines signals into final weighted probability score
+ARCHITECTURE.md           Multi-tenant production evolution plan
 ```
 
 ---
 
 ## Tradeoffs & Decisions
 
-- **dHash over CNN embeddings**: Fast, no GPU required, runs in the Node.js process. Trades accuracy for zero infrastructure overhead. The ARCHITECTURE.md describes the CLIP upgrade path.
-- **Graceful signal degradation**: If an image can't be fetched, the image hash signal returns a neutral score (0.28) and the weighted sum continues with the other four signals.
-- **ScraperAPI structured endpoints**: Used for Amazon (reliable JSON); eBay falls back to raw HTML scraping with regex if the structured endpoint doesn't return items.
-- **No persistence**: Results live in React state only. The ARCHITECTURE.md covers the Postgres + S3 data model for production.
+- **dHash over CNN embeddings** — Fast, no GPU, runs in-process. Trades accuracy for zero infrastructure overhead. The ARCHITECTURE.md covers the CLIP upgrade path.
+- **Separate search vs. image budget** — ScraperAPI search calls (Amazon, eBay, reference) are budgeted and gated. Image fetches go directly to CDN hosts and are tracked separately so they cannot starve remaining search tasks.
+- **Interleaved task scheduling** — Amazon and eBay tasks are interleaved `[A1, E1, A2, E2, …]` rather than run sequentially. This prevents image scoring of early Amazon results from exhausting the shared budget before eBay tasks start.
+- **Graceful signal degradation** — If an image cannot be fetched, the image hash signal returns a neutral fallback score and the weighted sum continues with the remaining four signals.
+- **eBay dual-path** — Uses ScraperAPI's structured eBay endpoint first; falls back to raw HTML scraping with regex if it returns no results. The HTML parser is the most fragile part of the pipeline.
+- **No persistence** — Results live in React state only. The ARCHITECTURE.md covers the Postgres data model for production.

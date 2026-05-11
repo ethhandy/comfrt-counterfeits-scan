@@ -9,7 +9,7 @@ import {
   HOODIE_INCLUDE,
   HOODIE_EXCLUDE,
   FALLBACK_REFERENCE_URLS,
-} from './const/scraper';
+} from '@/const/scraper';
 
 interface ShopifyProduct {
   id: number;
