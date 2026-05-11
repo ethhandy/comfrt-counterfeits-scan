@@ -1,36 +1,66 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Bustem — Comfrt Infringement Detector
 
-## Getting Started
+A Next.js app that scans Amazon and eBay for potential Comfrt brand infringements, scores each listing across 5 independent signals, and streams results to the UI in real time.
 
-First, run the development server:
+## Quick Start
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) and click **Start Scan**.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+> **Requirements:** Node.js 18+, npm. No additional API keys needed — the ScraperAPI key is bundled as a fallback. Override via `SCRAPER_API_KEY` env var.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## What It Does
 
-To learn more about Next.js, take a look at the following resources:
+1. **Reference set**: Fetches authentic Comfrt product images from `comfrt.com` and computes perceptual hashes (dHash via `sharp`) as ground truth.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+2. **Query fan-out**: Runs 11 Amazon + 10 eBay search queries (6 Amazon terms × 2 pages, 5 eBay terms × 2 pages) concurrently (max 8 in-flight), within a 120-request budget.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+3. **Deduplication**: ASIN / eBay item ID keyed; seen items are skipped.
 
-## Deploy on Vercel
+4. **5-signal scoring** (weights sum to 1.0):
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+   | Signal | Weight | What it measures |
+   |---|---|---|
+   | Title Keywords | 35% | Exact brand name, product-type terms, imitation language |
+   | Brand Claim | 25% | Brand field claiming/resembling "Comfrt" |
+   | Image Hash | 20% | Perceptual (dHash) similarity to authentic product images |
+   | Price Anomaly | 15% | Distance from authentic retail range ($79–$159) |
+   | Seller Trust | 5% | Seller feedback score indicators |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+5. **Streaming**: Results appear in the UI via Server-Sent Events as each listing is scored — no waiting for the full scan.
+
+6. **Explainability**: Each result shows the final score, top 3 reasons in plain English, per-signal bars, and raw values for debugging.
+
+---
+
+## Project Structure
+
+```
+app/
+  api/scan/route.ts   SSE endpoint — orchestrates the full pipeline
+  page.tsx            Client UI with real-time result rendering
+lib/
+  types.ts            Shared TypeScript interfaces
+  limiter.ts          Custom concurrency limiter (no external deps)
+  dhash.ts            Perceptual hash (dHash) with sharp
+  reference.ts        Fetches/hashes authentic Comfrt images
+  scraper.ts          ScraperAPI client for Amazon + eBay
+  signals.ts          Five scoring signal implementations
+  scoring.ts          Combines signals into final probability score
+ARCHITECTURE.md       Multi-tenant production evolution plan
+```
+
+---
+
+## Tradeoffs & Decisions
+
+- **dHash over CNN embeddings**: Fast, no GPU required, runs in the Node.js process. Trades accuracy for zero infrastructure overhead. The ARCHITECTURE.md describes the CLIP upgrade path.
+- **Graceful signal degradation**: If an image can't be fetched, the image hash signal returns a neutral score (0.28) and the weighted sum continues with the other four signals.
+- **ScraperAPI structured endpoints**: Used for Amazon (reliable JSON); eBay falls back to raw HTML scraping with regex if the structured endpoint doesn't return items.
+- **No persistence**: Results live in React state only. The ARCHITECTURE.md covers the Postgres + S3 data model for production.
