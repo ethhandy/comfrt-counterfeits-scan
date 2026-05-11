@@ -1,9 +1,3 @@
-/**
- * Difference hash (dHash) for perceptual image similarity.
- * Resize image to 9×8, grayscale, then compare adjacent pixels left→right.
- * Produces a 64-character binary string; compare two hashes with Hamming distance.
- */
-
 async function pixelsViaSharp(buffer: Buffer): Promise<Uint8Array | null> {
   try {
     const sharp = (await import('sharp')).default;
@@ -55,7 +49,6 @@ export function hammingDistance(a: string, b: string): number {
   return d;
 }
 
-/** Returns 0–1; 1 = identical, 0 = completely different */
 export function hashSimilarity(hash: string | null, refs: string[]): number {
   if (!hash || refs.length === 0) return 0;
   const validRefs = refs.filter(Boolean);

@@ -1,7 +1,3 @@
-/**
- * Minimal concurrency limiter — avoids ESM-only p-limit.
- * Queues work so at most `concurrency` tasks run simultaneously.
- */
 export function createLimiter(concurrency: number) {
   let running = 0;
   const queue: (() => void)[] = [];

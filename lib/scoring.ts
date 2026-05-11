@@ -28,7 +28,6 @@ export async function scoreListing(
     Math.max(0, signals.reduce((acc, s) => acc + s.contribution, 0))
   );
 
-  // Top reasons: pick highest-contribution signals with non-trivial scores
   const topReasons = [...signals]
     .sort((a, b) => b.contribution - a.contribution)
     .filter((s) => s.score > 0.3)

@@ -1,39 +1,17 @@
-/**
- * Five independent scoring signals.
- * Each returns a SignalResult with score ∈ [0,1], weight, and a human-readable reasoning string.
- *
- * Weights must sum to 1.0.
- *   title_keyword  0.35
- *   brand_claim    0.25
- *   image_hash     0.20
- *   price_anomaly  0.15
- *   seller_trust   0.05
- */
-
 import type { SignalResult } from './types';
 import { computeDHashFromUrl, hashSimilarity } from './dhash';
-import { AUTHENTIC_PRICE_RANGE } from './reference';
-
-// ── Signal 1: Title Keyword Analysis ─────────────────────────────────────────
-
-const BRAND_TERMS = ['comfrt', 'com frt', 'comfrrt', 'c0mfrt'];
-const PRODUCT_TERMS = [
-  'blanket hoodie',
-  'blanket sweatshirt',
-  'wearable blanket',
-  'hoodie blanket',
-  'blanket jacket',
-];
-const IMITATION_TERMS = [
-  'dupe',
-  'replica',
-  'knockoff',
-  'inspired by comfrt',
-  'like comfrt',
-  'comfrt style',
-  'comfrt inspired',
-  'similar to comfrt',
-];
+import {
+  AUTHENTIC_PRICE_RANGE,
+  SIGNAL_WEIGHTS,
+  BRAND_TERMS,
+  PRODUCT_TERMS,
+  IMITATION_TERMS,
+  PRICE_THRESHOLDS,
+  AMAZON_STARS,
+  EBAY_FEEDBACK,
+  IMAGE_HASH_FALLBACK_SCORE,
+  SELLER_DEFAULT_SCORE,
+} from './const/signals';
 
 export function computeTitleKeywordSignal(title: string): SignalResult {
   const t = title.toLowerCase();
@@ -45,7 +23,7 @@ export function computeTitleKeywordSignal(title: string): SignalResult {
   raw.brandHit = brandHit ?? null;
   if (brandHit) {
     score += 0.55;
-    reasons.push(`Title contains brand term "${brandHit}"`);
+    reasons.push(`Third-party listing claims to sell Comfrt ("${brandHit}" in title)`);
   }
 
   const productHits = PRODUCT_TERMS.filter((p) => t.includes(p));
@@ -65,26 +43,19 @@ export function computeTitleKeywordSignal(title: string): SignalResult {
   const normalized = Math.min(1, score);
   raw.rawScore = score;
 
+  const w = SIGNAL_WEIGHTS.titleKeyword;
   return {
     name: 'title_keyword',
     label: 'Title Keywords',
     score: normalized,
-    weight: 0.35,
-    contribution: normalized * 0.35,
+    weight: w,
+    contribution: normalized * w,
     raw,
-    reasoning:
-      reasons.length > 0
-        ? reasons.join('; ')
-        : 'No significant Comfrt keyword matches in title',
+    reasoning: reasons.length > 0 ? reasons.join('; ') : 'No significant Comfrt keyword matches in title',
   };
 }
 
-// ── Signal 2: Brand Claim Analysis ───────────────────────────────────────────
-
-export function computeBrandSignal(
-  title: string,
-  brand: string | null
-): SignalResult {
+export function computeBrandSignal(title: string, brand: string | null): SignalResult {
   const t = title.toLowerCase();
   const b = (brand ?? '').toLowerCase().trim();
   const raw: Record<string, unknown> = { brand };
@@ -110,18 +81,17 @@ export function computeBrandSignal(
   }
 
   raw.score = score;
+  const w = SIGNAL_WEIGHTS.brandClaim;
   return {
     name: 'brand_claim',
     label: 'Brand Claim',
     score,
-    weight: 0.25,
-    contribution: score * 0.25,
+    weight: w,
+    contribution: score * w,
     raw,
     reasoning,
   };
 }
-
-// ── Signal 3: Price Anomaly ───────────────────────────────────────────────────
 
 export function computePriceSignal(price: number | null): SignalResult {
   const { min, max } = AUTHENTIC_PRICE_RANGE;
@@ -133,10 +103,10 @@ export function computePriceSignal(price: number | null): SignalResult {
   if (price === null) {
     score = 0.28;
     reasoning = 'Price unavailable; defaulting to neutral';
-  } else if (price < 20) {
+  } else if (price < PRICE_THRESHOLDS.extremelyLow) {
     score = 0.92;
     reasoning = `Price $${price.toFixed(2)} is extremely low vs authentic range ($${min}–$${max})`;
-  } else if (price < 40) {
+  } else if (price < PRICE_THRESHOLDS.veryLow) {
     score = 0.78;
     reasoning = `Price $${price.toFixed(2)} is drastically below authentic range ($${min}–$${max})`;
   } else if (price < min) {
@@ -150,34 +120,30 @@ export function computePriceSignal(price: number | null): SignalResult {
     reasoning = `Price $${price.toFixed(2)} exceeds authentic retail; unlikely counterfeit`;
   }
 
+  const w = SIGNAL_WEIGHTS.priceAnomaly;
   return {
     name: 'price_anomaly',
     label: 'Price Anomaly',
     score,
-    weight: 0.15,
-    contribution: score * 0.15,
+    weight: w,
+    contribution: score * w,
     raw,
     reasoning,
   };
 }
 
-// ── Signal 4: Image Perceptual Hash ──────────────────────────────────────────
-
 export async function computeImageHashSignal(
   imageUrl: string | null,
   referenceHashes: string[]
 ): Promise<SignalResult> {
-  const base = {
-    name: 'image_hash',
-    label: 'Image Similarity',
-    weight: 0.20,
-  };
+  const w = SIGNAL_WEIGHTS.imageHash;
+  const base = { name: 'image_hash', label: 'Image Similarity', weight: w };
 
   if (!imageUrl || referenceHashes.length === 0) {
     return {
       ...base,
-      score: 0.28,
-      contribution: 0.28 * 0.20,
+      score: IMAGE_HASH_FALLBACK_SCORE,
+      contribution: IMAGE_HASH_FALLBACK_SCORE * w,
       raw: { available: false },
       reasoning: 'Image similarity unavailable — no image or no reference hashes',
     };
@@ -187,29 +153,22 @@ export async function computeImageHashSignal(
   if (!hash) {
     return {
       ...base,
-      score: 0.28,
-      contribution: 0.28 * 0.20,
+      score: IMAGE_HASH_FALLBACK_SCORE,
+      contribution: IMAGE_HASH_FALLBACK_SCORE * w,
       raw: { available: false, reason: 'Image fetch or hash failed' },
       reasoning: 'Could not fetch or process listing image',
     };
   }
 
   const similarity = hashSimilarity(hash, referenceHashes);
-
   return {
     ...base,
     score: similarity,
-    contribution: similarity * 0.20,
-    raw: {
-      hash,
-      similarity,
-      referenceCount: referenceHashes.length,
-    },
+    contribution: similarity * w,
+    raw: { hash, similarity, referenceCount: referenceHashes.length },
     reasoning: `Visual similarity to authentic Comfrt products: ${(similarity * 100).toFixed(0)}%`,
   };
 }
-
-// ── Signal 5: Seller Trust Indicators ────────────────────────────────────────
 
 export function computeSellerSignal(
   seller: string | null,
@@ -217,38 +176,34 @@ export function computeSellerSignal(
   reviewCount: number | null
 ): SignalResult {
   const raw: Record<string, unknown> = { seller, rating, reviewCount };
-  let score = 0.42;
+  let score = SELLER_DEFAULT_SCORE;
   let reasoning = 'Insufficient seller data for assessment';
 
   if (rating !== null) {
-    // Distinguish Amazon product stars (≤5) from eBay feedback % (>5)
     const isAmazonStars = rating <= 5;
 
     if (isAmazonStars) {
-      // Amazon star rating: 4.5★ = well-rated product (established seller)
-      const stars = rating;
-      if (stars >= 4.5 && (reviewCount ?? 0) > 100) {
+      if (rating >= AMAZON_STARS.good && (reviewCount ?? 0) > AMAZON_STARS.minReviews) {
         score = 0.15;
-        reasoning = `Well-rated Amazon product (${stars}★, ${reviewCount} reviews) — established listing`;
-      } else if (stars >= 4.0) {
+        reasoning = `Well-rated Amazon product (${rating}★, ${reviewCount} reviews) — established listing`;
+      } else if (rating >= AMAZON_STARS.average) {
         score = 0.30;
-        reasoning = `Average Amazon rating (${stars}★)`;
-      } else if (stars < 3.5) {
+        reasoning = `Average Amazon rating (${rating}★)`;
+      } else if (rating < AMAZON_STARS.poor) {
         score = 0.65;
-        reasoning = `Low Amazon rating (${stars}★) — poor product quality signals`;
+        reasoning = `Low Amazon rating (${rating}★) — poor product quality signals`;
       } else {
-        score = 0.42;
-        reasoning = `Neutral Amazon rating (${stars}★)`;
+        score = SELLER_DEFAULT_SCORE;
+        reasoning = `Neutral Amazon rating (${rating}★)`;
       }
     } else {
-      // eBay feedback percentage
-      if (rating < 85) {
+      if (rating < EBAY_FEEDBACK.highRisk) {
         score = 0.82;
         reasoning = `Low eBay seller feedback (${rating.toFixed(1)}%) — high-risk seller profile`;
-      } else if (rating < 92) {
+      } else if (rating < EBAY_FEEDBACK.belowAvg) {
         score = 0.58;
         reasoning = `Below-average eBay seller feedback (${rating.toFixed(1)}%)`;
-      } else if (rating >= 99) {
+      } else if (rating >= EBAY_FEEDBACK.excellent) {
         score = 0.12;
         reasoning = `Excellent eBay seller feedback (${rating.toFixed(1)}%) — established account`;
       } else {
@@ -258,20 +213,18 @@ export function computeSellerSignal(
     }
   }
 
-  if (seller) {
-    const sl = seller.toLowerCase();
-    if (sl.includes('official') || sl.includes('comfrt')) {
-      reasoning += '; Seller name implies official affiliation (unverified)';
-    }
+  if (seller?.toLowerCase().match(/official|comfrt/)) {
+    reasoning += '; Seller name implies official affiliation (unverified)';
   }
 
   const clamped = Math.min(1, Math.max(0, score));
+  const w = SIGNAL_WEIGHTS.sellerTrust;
   return {
     name: 'seller_trust',
     label: 'Seller Trust',
     score: clamped,
-    weight: 0.05,
-    contribution: clamped * 0.05,
+    weight: w,
+    contribution: clamped * w,
     raw,
     reasoning,
   };
